@@ -13,8 +13,14 @@ __pycache__/
 # Environment variables
 .env
 
-# Backup folder
+# Backup
 older/
+
+# Logs & generated files
+server_logs.txt
+decision_traces.txt
+parsed_traces.json
+gemini_output.json
 
 # OS files
 .DS_Store
