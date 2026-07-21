@@ -3,12 +3,14 @@ import time
 import json
 import logging
 import tempfile
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from typing import Optional
+from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks, Form
 from api.schemas import ScamDetectionResponse, SignalsBreakdown, SignalDetail
 from core.transcriber import Transcriber
 from core.ensemble import predict_ensemble
 from core.signal_detector import SignalDetector
 from core.summarizer import Summarizer
+from core.email_alerts import send_scam_alert
 
 # Configure logger
 logger = logging.getLogger("scam_detector.api.file")
@@ -23,11 +25,18 @@ summarizer = Summarizer()
 
 
 @router.post("/file", response_model=ScamDetectionResponse)
-async def detect_file(file: UploadFile = File(...)):
+async def detect_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user_email: Optional[str] = Form(None),
+):
     """
     Accepts multipart file uploads (audio, video, text, or image files).
     Performs transcription, keyword-semantic signal verification, ensemble scoring,
     and returns a complete scam risk profile.
+
+    Optional `user_email` form field: if provided and the verdict is SCAM,
+    a warning email is sent to that address in the background.
     """
     logger.info(f"Received file upload request. File Name: '{file.filename}', Content-Type: '{file.content_type}'")
     
@@ -262,6 +271,15 @@ async def detect_file(file: UploadFile = File(...)):
             f"Processing Time: {processing_time_ms}ms, Verdict: {verdict}, "
             f"Score: {scam_score:.4f}"
         )
+
+        # 6. Pipeline Stage: Fire-and-forget scam alert email
+        # Runs after the response is sent, so it never adds to processing_time_ms
+        # or blocks/slows down the API response.
+        if verdict == "SCAM" and user_email:
+            logger.info(f"Queuing scam alert email to {user_email}")
+            background_tasks.add_task(
+                send_scam_alert, user_email, transcript, summary, scam_score, language
+            )
 
         return ScamDetectionResponse(
             scam_score=round(scam_score, 2),
