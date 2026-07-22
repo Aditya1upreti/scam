@@ -10,7 +10,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import routes_file, routes_realtime
+import routes_file
+import routes_realtime
 from core.session_manager import session_manager
 
 # Logging Setup
